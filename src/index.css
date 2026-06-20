@@ -27,18 +27,25 @@
   :root {
     --background: 220 65% 11%; /* #0A192F */
     --foreground: 0 0% 100%; /* #FFFFFF */
+  }
+
+  /* Force Mysten dApp Kit Web Components to use valid colors */
+  /* This prevents the Shadow DOM from inhaling Tailwind's invalid HSL numeric tuples */
+  mysten-dapp-kit-connect-modal,
+  mysten-dapp-kit-connect-button {
+    --background: #FFFFFF !important;
+    --foreground: #0F172A !important;
+    --popover: #FFFFFF !important;
+    --popover-foreground: #0F172A !important;
+    --primary: #005CBE !important;
+    --primary-foreground: #FFFFFF !important;
+    --border: #E2E8F0 !important;
+    --muted: #F1F5F9 !important;
+    --muted-foreground: #64748B !important;
+    --radius: 20px !important;
     
-    /* Mysten dApp Kit v2 UI Theme Overrides */
-    --dapp-kit-background: #FFFFFF;
-    --dapp-kit-foreground: #0F172A;
-    --dapp-kit-popover: #FFFFFF;
-    --dapp-kit-popover-foreground: #0F172A;
-    --dapp-kit-primary: #005CBE;
-    --dapp-kit-primary-foreground: #FFFFFF;
-    --dapp-kit-border: #E2E8F0;
-    --dapp-kit-muted: #F1F5F9;
-    --dapp-kit-muted-foreground: #64748B;
-    --dapp-kit-radius: 20px;
+    --dapp-kit-background: #FFFFFF !important;
+    --dapp-kit-popover: #FFFFFF !important;
   }
 
   body {

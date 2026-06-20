@@ -2,10 +2,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { History, ExternalLink, ShieldCheck, ArrowRight } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCurrentClient } from '@mysten/dapp-kit-react';
+import { SuiGraphQLClient } from '@mysten/sui/graphql';
+
+const graphqlClient = new SuiGraphQLClient({
+  url: 'https://sui-testnet.mystenlabs.com/graphql',
+  network: 'testnet' as const
+});
 
 export default function ActivityPage() {
-  const client = useCurrentClient();
   const AGENT_POLICY_PACKAGE_ID = (import.meta as any).env.VITE_AGENT_POLICY_PACKAGE_ID || "0xYOUR_PACKAGE_ID";
 
   const { data: events, isLoading } = useQuery({
@@ -13,28 +17,37 @@ export default function ActivityPage() {
     queryFn: async () => {
       if (AGENT_POLICY_PACKAGE_ID === "0xYOUR_PACKAGE_ID") return [];
       
-      const res = await client.queryEvents({
-        query: {
-          MoveEventType: `${AGENT_POLICY_PACKAGE_ID}::policy::TradeLog`,
-        },
-        limit: 50,
-        order: 'descending'
+      const result = await graphqlClient.query({
+        query: `
+          query QueryEvents($type: String, $first: Int) {
+            events(first: $first, filter: { eventType: $type }) {
+              nodes {
+                timestamp
+                contents { json }
+                sender { address }
+                transactionBlock { digest }
+              }
+            }
+          }
+        `,
+        variables: { type: `${AGENT_POLICY_PACKAGE_ID}::policy::TradeLog`, first: 50 }
       });
-      return res.data;
+      return (result.data as any)?.events?.nodes || [];
     },
-    enabled: !!client
+    enabled: AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID"
   });
 
-  const logs = events?.map((event) => {
-    const parsed = event.parsedJson as any;
-    const date = new Date(Number(event.timestampMs)).toLocaleString();
+  const logs = events?.map((event: any, index: number) => {
+    const parsed = event?.contents?.json;
+    const date = event.timestamp ? new Date(event.timestamp).toLocaleString() : new Date().toLocaleString();
+    const digest = event?.transactionBlock?.digest || "-";
     return {
-      id: event.id.txDigest + event.id.eventSeq,
+      id: index,
       type: "Trade Executed",
       agent: parsed?.agent || "AI Agent Wallet",
       details: `Spent ${parsed?.amount_spent} SUI (MIST)`,
       time: date,
-      hash: event.id.txDigest,
+      hash: digest,
       status: "success"
     };
   }) || [];

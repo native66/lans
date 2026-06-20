@@ -75,7 +75,7 @@ export default function AgentsPage() {
         include: { effects: true }
       });
 
-      const createdObjects = txData.effects?.created || [];
+      const createdObjects = (txData as any).effects?.created || (txData as any).Transaction?.effects?.created || [];
       const realPolicyId = createdObjects[0]?.reference?.objectId;
 
       if (!realPolicyId) {

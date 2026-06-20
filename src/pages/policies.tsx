@@ -2,11 +2,60 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Shield, Plus, Lock } from "lucide-react";
 
+import { useQuery } from "@tanstack/react-query";
+import { useCurrentAccount } from '@mysten/dapp-kit-react';
+import { SuiGraphQLClient } from '@mysten/sui/graphql';
+
+const graphqlClient = new SuiGraphQLClient({
+  url: 'https://sui-testnet.mystenlabs.com/graphql',
+  network: 'testnet' as const
+});
+
 export default function PoliciesPage() {
-  const policies = [
-    { id: 1, name: "Standard DeepBook Setup", protocols: ["DeepBook"], assets: ["SUI", "USDC"], maxSlippage: "1.0%", maxTrades: 50 },
-    { id: 2, name: "Restricted DCA", protocols: ["DeepBook"], assets: ["SUI", "USDC"], maxSlippage: "0.5%", maxTrades: 10 },
-  ];
+  const account = useCurrentAccount();
+  const AGENT_POLICY_PACKAGE_ID = (import.meta as any).env.VITE_AGENT_POLICY_PACKAGE_ID || "0xYOUR_PACKAGE_ID";
+
+  const { data: vaultsData, isLoading } = useQuery({
+    queryKey: ['owned-vaults', account?.address],
+    queryFn: async () => {
+      const result = await graphqlClient.query({
+        query: `
+          query GetVaults($owner: SuiAddress!, $type: String!) {
+            address(address: $owner) {
+              objects(filter: { type: $type }) {
+                nodes {
+                  address
+                  asMoveObject {
+                    contents { json }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: { owner: account!.address, type: `${AGENT_POLICY_PACKAGE_ID}::policy::AgentVault` }
+      });
+      return (result.data as any)?.address?.objects?.nodes || [];
+    },
+    enabled: !!account && AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID",
+  });
+
+  const policies = vaultsData?.map((obj: any) => {
+    const fields = obj?.asMoveObject?.contents?.json;
+    const budgetSui = (Number(fields?.budget || 0) / 1e9).toFixed(2);
+    const pubkey = fields?.agent_pubkey || "Unknown";
+    const expirationDate = fields?.expiration_ms ? new Date(Number(fields.expiration_ms)).toLocaleDateString() : "Never";
+
+    return {
+      id: obj.address,
+      name: `Vault Policy`,
+      protocols: ["DeepBook V3"], 
+      assets: ["SUI"],
+      budget: `${budgetSui} SUI`,
+      expires: expirationDate,
+      agent: pubkey
+    };
+  }) || [];
 
   return (
     <div className="space-y-6">
@@ -22,7 +71,11 @@ export default function PoliciesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {policies.map((policy) => (
+        {isLoading ? (
+          <div className="col-span-2 text-center py-10 text-foreground/50">Loading on-chain policies...</div>
+        ) : policies.length === 0 ? (
+          <div className="col-span-2 text-center py-10 text-foreground/50">No policies found. Deploy an agent to create a Vault Policy.</div>
+        ) : policies.map((policy) => (
           <Card key={policy.id}>
             <CardHeader>
               <div className="flex justify-between items-start">
@@ -32,7 +85,7 @@ export default function PoliciesPage() {
                   </div>
                   <div>
                     <CardTitle className="text-lg">{policy.name}</CardTitle>
-                    <CardDescription>Strict sandbox implementation</CardDescription>
+                    <CardDescription className="font-mono text-xs mt-1" title={policy.agent}>Agent: {policy.agent.substring(0, 10)}...</CardDescription>
                   </div>
                 </div>
                 <div className="bg-card border border-border px-2 py-1 rounded text-xs flex items-center gap-1 text-foreground/70">
@@ -62,12 +115,12 @@ export default function PoliciesPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-foreground/50 block text-xs">Max Slippage</span>
-                    <span className="font-mono">{policy.maxSlippage}</span>
+                    <span className="text-foreground/50 block text-xs">Remaining Budget</span>
+                    <span className="font-mono">{policy.budget}</span>
                   </div>
                   <div>
-                    <span className="text-foreground/50 block text-xs">Max Trades/Day</span>
-                    <span className="font-mono">{policy.maxTrades}</span>
+                    <span className="text-foreground/50 block text-xs">Expiration Date</span>
+                    <span className="font-mono">{policy.expires}</span>
                   </div>
                 </div>
               </div>

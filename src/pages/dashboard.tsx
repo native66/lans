@@ -5,32 +5,148 @@ import { motion } from "motion/react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 
-const performanceData = [
-  { time: '00:00', value: 4000 },
-  { time: '04:00', value: 4200 },
-  { time: '08:00', value: 4100 },
-  { time: '12:00', value: 4600 },
-  { time: '16:00', value: 4800 },
-  { time: '20:00', value: 5000 },
-  { time: '24:00', value: 5400 },
-];
+
+
+import { useCurrentAccount } from '@mysten/dapp-kit-react';
+import { SuiGraphQLClient } from '@mysten/sui/graphql';
+
+const graphqlClient = new SuiGraphQLClient({
+  url: 'https://sui-testnet.mystenlabs.com/graphql',
+  network: 'testnet' as const
+});
+
+const AGENT_POLICY_PACKAGE_ID = (import.meta as any).env.VITE_AGENT_POLICY_PACKAGE_ID || "0xYOUR_PACKAGE_ID";
 
 export default function DashboardPage() {
-  const { data: profileData } = useQuery({
-    queryKey: ["profile"],
+  const account = useCurrentAccount();
+
+
+  // 1. Fetch Wallet Balance via GraphQL
+  const { data: balanceData } = useQuery({
+    queryKey: ['balance', account?.address],
     queryFn: async () => {
-      const res = await fetch("/api/v1/wallet/profile");
-      return res.json();
-    }
+      const result = await graphqlClient.query({
+        query: `
+          query GetBalances($owner: SuiAddress!) {
+            address(address: $owner) {
+              balance(type: "0x2::sui::SUI") { totalBalance }
+            }
+          }
+        `,
+        variables: { owner: account!.address }
+      });
+      return (result.data as any)?.address?.balance?.totalBalance || "0";
+    },
+    enabled: !!account,
   });
 
-  const { data: agentsData } = useQuery({
-    queryKey: ["agents"],
+  const formattedBalance = balanceData ? (Number(balanceData) / 1e9).toFixed(2) : "0.00";
+
+  // 2. Fetch User's Agent Vaults (Active Agents & TVL) via GraphQL
+  const { data: vaultsData } = useQuery({
+    queryKey: ['owned-vaults', account?.address],
     queryFn: async () => {
-      const res = await fetch("/api/v1/agents/list");
-      return res.json();
-    }
+      const result = await graphqlClient.query({
+        query: `
+          query GetVaults($owner: SuiAddress!, $type: String!) {
+            address(address: $owner) {
+              objects(filter: { type: $type }) {
+                nodes {
+                  asMoveObject {
+                    contents { json }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: { owner: account!.address, type: `${AGENT_POLICY_PACKAGE_ID}::policy::AgentVault` }
+      });
+      return (result.data as any)?.address?.objects?.nodes || [];
+    },
+    enabled: !!account && AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID",
   });
+
+  const activeAgentsCount = vaultsData?.length || 0;
+  const tvlMist = vaultsData?.reduce((acc: number, obj: any) => {
+    const fields = obj?.asMoveObject?.contents?.json;
+    return acc + Number(fields?.budget || 0);
+  }, 0) || 0;
+  const tvlSui = (tvlMist / 1e9).toFixed(2);
+
+  // 3. Fetch TradeLog Events (Global for 24h Volume & Activity) via GraphQL
+  const { data: eventsData } = useQuery({
+    queryKey: ['global-trade-logs'],
+    queryFn: async () => {
+      const result = await graphqlClient.query({
+        query: `
+          query QueryEvents($type: String, $first: Int) {
+            events(first: $first, filter: { eventType: $type }) {
+              nodes {
+                timestamp
+                contents { json }
+              }
+            }
+          }
+        `,
+        variables: { type: `${AGENT_POLICY_PACKAGE_ID}::policy::TradeLog`, first: 100 }
+      });
+      return (result.data as any)?.events?.nodes || [];
+    },
+    enabled: AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID",
+    refetchInterval: 30000,
+  });
+
+  // Calculate 24h Volume
+  const nowMs = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  
+  let volume24hMist = 0;
+  const recentActivity: any[] = [];
+  const hourlyBuckets = new Map<string, number>();
+
+  if (eventsData && Array.isArray(eventsData)) {
+    eventsData.forEach((event: any) => {
+      const parsed = event?.contents?.json;
+      if (!parsed) return;
+      
+      const amountMist = Number(parsed?.amount_spent || 0);
+      const timeMs = new Date(event.timestamp).getTime();
+
+      // Volume in last 24h
+      if (nowMs - timeMs <= oneDayMs) {
+        volume24hMist += amountMist;
+      }
+
+      // Activity list (last 3)
+      if (recentActivity.length < 3) {
+        recentActivity.push({
+          action: "Trade Executed",
+          desc: `Spent ${(amountMist / 1e9).toFixed(2)} SUI`,
+          time: new Date(timeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+
+      // Hourly Buckets for Chart (Last 24h)
+      if (nowMs - timeMs <= oneDayMs) {
+        const hour = new Date(timeMs).getHours();
+        const hourStr = `${hour.toString().padStart(2, '0')}:00`;
+        hourlyBuckets.set(hourStr, (hourlyBuckets.get(hourStr) || 0) + (amountMist / 1e9));
+      }
+    });
+  }
+
+  const volume24hSui = (volume24hMist / 1e9).toFixed(2);
+
+  // Sort and format chart data
+  const performanceData = Array.from(hourlyBuckets.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([time, value]) => ({ time, value }));
+
+  // Fallback if no chart data
+  if (performanceData.length === 0) {
+    performanceData.push({ time: new Date().getHours() + ":00", value: 0 });
+  }
 
   return (
     <div className="space-y-8">
@@ -53,9 +169,9 @@ export default function DashboardPage() {
               <DollarSign className="w-4 h-4 text-foreground/50" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$12,450.00</div>
+              <div className="text-2xl font-bold">{tvlSui} SUI</div>
               <p className="text-xs text-primary mt-1 flex items-center">
-                <ArrowUpRight className="w-3 h-3 mr-1" /> +4.2% from yesterday
+                <ArrowUpRight className="w-3 h-3 mr-1" /> On-chain TVL
               </p>
             </CardContent>
           </Card>
@@ -68,9 +184,9 @@ export default function DashboardPage() {
               <Bot className="w-4 h-4 text-foreground/50" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{agentsData?.agents?.length || 3}</div>
+              <div className="text-2xl font-bold">{activeAgentsCount}</div>
               <p className="text-xs text-foreground/50 mt-1">
-                2 policies expiring soon
+                Vaults deployed
               </p>
             </CardContent>
           </Card>
@@ -83,9 +199,9 @@ export default function DashboardPage() {
               <Wallet className="w-4 h-4 text-foreground/50" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{profileData?.balance || "0 SUI"}</div>
-              <p className="text-xs text-foreground/50 mt-1 flex items-center truncate">
-                Address: {profileData?.address || "..."}
+              <div className="text-2xl font-bold">{formattedBalance} SUI</div>
+              <p className="text-xs text-foreground/50 mt-1 flex items-center truncate" title={account?.address || ""}>
+                Address: {account?.address ? `${account.address.substring(0,6)}...${account.address.substring(account.address.length-4)}` : "Not connected"}
               </p>
             </CardContent>
           </Card>
@@ -98,9 +214,9 @@ export default function DashboardPage() {
               <Activity className="w-4 h-4 text-foreground/50" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$4,250.00</div>
+              <div className="text-2xl font-bold">{volume24hSui} SUI</div>
               <p className="text-xs text-primary mt-1 flex items-center">
-                <ArrowUpRight className="w-3 h-3 mr-1" /> 124 executed trades
+                <ArrowUpRight className="w-3 h-3 mr-1" /> Total volume in 24h
               </p>
             </CardContent>
           </Card>
@@ -110,8 +226,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Agent Performance Summary</CardTitle>
-            <CardDescription>Aggregate PnL across all active trading policies.</CardDescription>
+            <CardTitle>Trading Volume (24h)</CardTitle>
+            <CardDescription>Aggregate execution volume from on-chain TradeLog events.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
@@ -119,7 +235,7 @@ export default function DashboardPage() {
                 <LineChart data={performanceData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="time" stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                  <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value.toFixed(1)}`} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0A192F', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
                     itemStyle={{ color: '#4DA2FF' }}
@@ -138,11 +254,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { action: "Trade Executed", desc: "Bought 50 SUI @ 1.25 USDC", time: "2m ago" },
-                { action: "Order Placed", desc: "Limit Sell 100 SUI @ 1.40 USDC", time: "15m ago" },
-                { action: "Policy Budget Reached", desc: "Market Maker Agent #01 stopped", time: "1h ago" },
-              ].map((item, i) => (
+              {recentActivity.length > 0 ? recentActivity.map((item, i) => (
                 <div key={i} className="flex items-start justify-between border-b border-border pb-4 last:border-0 last:pb-0">
                   <div>
                     <p className="font-medium text-sm">{item.action}</p>
@@ -150,7 +262,9 @@ export default function DashboardPage() {
                   </div>
                   <span className="text-xs text-foreground/40">{item.time}</span>
                 </div>
-              ))}
+              )) : (
+                <div className="text-sm text-foreground/50 text-center py-4">No recent activity found.</div>
+              )}
             </div>
             <Button variant="ghost" className="w-full mt-4 text-xs h-8">View All Activity</Button>
           </CardContent>
