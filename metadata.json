@@ -1,0 +1,7 @@
+{
+  "name": "LANS",
+  "description": "An AI-powered Autonomous Agent Wallet on Sui, allowing users to safely delegate limited financial authority to AI agents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

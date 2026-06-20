@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #4DA2FF;
+  --color-secondary: #7CC7FF;
+  --color-dark: #0A192F;
+  --color-light: #DFF5FF;
+  --color-white: #FFFFFF;
+
+  --color-background: #0A192F;
+  --color-foreground: #FFFFFF;
+
+  --color-card: rgba(255, 255, 255, 0.05);
+  --color-card-foreground: #FFFFFF;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-input: rgba(255, 255, 255, 0.1);
+  --color-ring: #4DA2FF;
+
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+}
+
+@layer base {
+  :root {
+    --background: 220 65% 11%; /* #0A192F */
+    --foreground: 0 0% 100%; /* #FFFFFF */
+    
+    /* Mysten dApp Kit v2 UI Theme Overrides */
+    --dapp-kit-background: #FFFFFF;
+    --dapp-kit-foreground: #0F172A;
+    --dapp-kit-popover: #FFFFFF;
+    --dapp-kit-popover-foreground: #0F172A;
+    --dapp-kit-primary: #005CBE;
+    --dapp-kit-primary-foreground: #FFFFFF;
+    --dapp-kit-border: #E2E8F0;
+    --dapp-kit-muted: #F1F5F9;
+    --dapp-kit-muted-foreground: #64748B;
+    --dapp-kit-radius: 20px;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
