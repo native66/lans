@@ -71,10 +71,31 @@ export class DeepBookService {
     
     // Dynamic Pool Discovery (No Hardcode)
     const poolInfo = await this.resolvePoolId(intent.pool);
-    
+    const DEEPBOOK_PACKAGE_ID = process.env.VITE_DEEPBOOK_PACKAGE_ID || "0xfb28c4cbc6865bd1c897d26aecbe1f8792d1509a20ffec692c800660cbec6982";
+    const AGENT_POLICY_PACKAGE_ID = process.env.VITE_AGENT_POLICY_PACKAGE_ID;
+
+    // Determine if SUI is Base or Quote (Vault only holds SUI)
+    const isSuiBase = poolInfo.baseType.includes("::sui::SUI") || poolInfo.baseType === "0x2::sui::SUI";
+    const isSuiQuote = poolInfo.quoteType.includes("::sui::SUI") || poolInfo.quoteType === "0x2::sui::SUI";
+
+    if (!isSuiBase && !isSuiQuote) {
+       throw new Error("Vault holds SUI but the selected pool does not support SUI as base or quote.");
+    }
+
+    // Fetch Vault Owner dynamically to send swapped proceeds
+    const vaultRes = await fetch("https://fullnode.testnet.sui.io:443", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sui_getObject", params: [vaultId, { showContent: true }] })
+    });
+    const vaultData = await vaultRes.json();
+    const vaultOwner = vaultData.result?.data?.content?.fields?.owner;
+    if (!vaultOwner) throw new Error("Could not determine Vault Owner from on-chain data");
+
     // Step 1: Extract Budget + Hot Potato Receipt from Vault
+    // Note: Our Vaults are initialized with SUI (T = 0x2::sui::SUI)
     const [tradeCoin, tradeReceipt] = tx.moveCall({
       target: `${AGENT_POLICY_PACKAGE_ID}::policy::execute_trade`,
+      typeArguments: ['0x2::sui::SUI'],
       arguments: [
         tx.object(vaultId),
         tx.pure.u64(amountMist),
@@ -82,53 +103,74 @@ export class DeepBookService {
       ]
     });
 
-    let baseProceeds, quoteProceeds;
+    const DEEP_TYPE = "0x36dbef866a1d62bf7328989a10fb2f07d769f4ee587c0de4a0a256e57e0a58a8::deep::DEEP";
 
-    if (intent.type === "flash_loan") {
-      // ADVANCED: Flash Loan Arbitrage Flow
-      // Borrow assets without collateral, trade, and return in 1 block
-      const [borrowedBase, flashReceipt] = tx.moveCall({
-        target: `${DEEPBOOK_PACKAGE_ID}::pool::borrow_flashloan_base`,
-        arguments: [tx.object(poolInfo.address), tx.pure.u64(amountMist)]
-      });
+    // DeepBook V3 requires DEEP coin for fee, we pass a zero DEEP coin (fee will be deducted from output)
+    const [zeroDeep] = tx.moveCall({ 
+      target: '0x2::coin::zero', 
+      typeArguments: [DEEP_TYPE] 
+    });
 
-      // Trade logic here (e.g., swap on a DEX) - Simplified for hackathon
-      
-      // Repay Flash Loan
-      tx.moveCall({
-        target: `${DEEPBOOK_PACKAGE_ID}::pool::repay_flashloan_base`,
-        arguments: [tx.object(poolInfo.address), flashReceipt, borrowedBase] // Simplified
-      });
+    let returnedSui;
 
-      baseProceeds = tradeCoin; // Using extracted coin directly if arbitrary
-    } else {
-      // Extract single zero coin using proper destructuring to prevent Result Proxy error
-      const [zeroQuote] = tx.moveCall({ 
-        target: '0x2::coin::zero', 
-        typeArguments: [poolInfo.quoteType] 
-      });
-
-      // STANDARD: Spot Trading on Deepbook
-      [baseProceeds, quoteProceeds] = tx.moveCall({
-        target: `${DEEPBOOK_PACKAGE_ID}::pool::place_limit_order`,
+    if (isSuiBase) {
+      // Swap SUI (Base) for Other (Quote)
+      const [baseProceeds, quoteProceeds, deepProceeds] = tx.moveCall({
+        target: `${DEEPBOOK_PACKAGE_ID}::pool::swap_exact_base_for_quote`,
+        typeArguments: [poolInfo.baseType, poolInfo.quoteType],
         arguments: [
           tx.object(poolInfo.address),
-          tx.pure.u64(Date.now()), // clientOrderId
-          tx.pure.u8(0), // order_type
-          tx.pure.u8(0), // self_matching
-          tx.pure.u64(0), // price (simplified)
-          tx.pure.u64(amountMist), // quantity
-          tx.pure.bool(intent.action === "buy"), // isBid
           tradeCoin, // base_coin
-          zeroQuote, // quote_coin (destructured proxy to prevent 'Expected Object but received Object')
-          tx.object.clock() // Clock
+          zeroDeep,  // deep_coin
+          tx.pure.u64(0), // min_quote_amount (Simplified for Hackathon)
+          tx.object.clock()
         ]
       });
-    }
 
-    // Transfer leftover quote Proceeds back to the Vault to prevent 'Cannot ignore values without drop ability' error
-    if (quoteProceeds) {
-      tx.transferObjects([quoteProceeds], tx.pure.address(vaultId));
+      returnedSui = baseProceeds; // Leftover SUI
+
+      // Send swapped assets to Vault Owner
+      tx.moveCall({
+        target: '0x2::transfer::public_transfer',
+        typeArguments: [poolInfo.quoteType],
+        arguments: [quoteProceeds, tx.pure.address(vaultOwner)]
+      });
+
+      // Destroy zero DEEP coin
+      tx.moveCall({
+        target: '0x2::coin::destroy_zero',
+        typeArguments: [DEEP_TYPE],
+        arguments: [deepProceeds]
+      });
+    } else {
+      // Swap SUI (Quote) for Other (Base)
+      const [baseProceeds, quoteProceeds, deepProceeds] = tx.moveCall({
+        target: `${DEEPBOOK_PACKAGE_ID}::pool::swap_exact_quote_for_base`,
+        typeArguments: [poolInfo.baseType, poolInfo.quoteType],
+        arguments: [
+          tx.object(poolInfo.address),
+          tradeCoin, // quote_coin
+          zeroDeep,  // deep_coin
+          tx.pure.u64(0), // min_base_amount (Simplified)
+          tx.object.clock()
+        ]
+      });
+
+      returnedSui = quoteProceeds; // Leftover SUI
+
+      // Send swapped assets to Vault Owner
+      tx.moveCall({
+        target: '0x2::transfer::public_transfer',
+        typeArguments: [poolInfo.baseType],
+        arguments: [baseProceeds, tx.pure.address(vaultOwner)]
+      });
+
+      // Destroy zero DEEP coin
+      tx.moveCall({
+        target: '0x2::coin::destroy_zero',
+        typeArguments: [DEEP_TYPE],
+        arguments: [deepProceeds]
+      });
     }
 
     // Step 3: MUST Consume Hot Potato Receipt to prevent theft
@@ -138,7 +180,7 @@ export class DeepBookService {
       arguments: [
         tx.object(vaultId),
         tradeReceipt,
-        baseProceeds
+        returnedSui
       ]
     });
     
