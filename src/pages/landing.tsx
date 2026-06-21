@@ -45,45 +45,7 @@ export default function LandingPage() {
     refetchInterval: 10000,
   });
 
-  const { data: globalVaults, isLoading: isAgentsLoading } = useQuery({
-    queryKey: ['landing-global-vaults'],
-    queryFn: async () => {
-      const result = await graphqlClient.query({
-        query: `
-          query QueryVaults($type: String!) {
-            objects(first: 20, filter: { type: $type }) {
-              nodes {
-                address
-                asMoveObject {
-                  contents {
-                    json
-                  }
-                }
-              }
-            }
-          }
-        `,
-        variables: { type: `${AGENT_POLICY_PACKAGE_ID}::policy::AgentVault` }
-      });
-      return (result.data as any)?.objects?.nodes || [];
-    },
-    enabled: AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID",
-    refetchInterval: 10000,
-  });
 
-  const allAgents = globalVaults?.map((node: any, idx: number) => {
-    const fields = node.asMoveObject?.contents?.json;
-    const isShutdown = fields?.expiration_ms && Number(fields.expiration_ms) < Date.now();
-    
-    return {
-      id: "vault_" + idx,
-      name: "Autonomous Agent",
-      pubkey: fields?.agent_pubkey || "Unknown",
-      policyId: node.address,
-      status: isShutdown ? "Shutdown" : "Active",
-      prompt: "On-chain Vault"
-    };
-  }) || [];
   const recentTrades = globalEvents?.map((event: any, index: number) => {
     const parsed = event?.contents?.json;
     const amountSui = (Number(parsed?.amount_spent || 0) / 1e9).toFixed(2);
@@ -246,55 +208,25 @@ export default function LandingPage() {
 
           </section>
 
-          {/* Live Network Activity Section */}
-          <section className="overflow-hidden">
-            <div className="flex items-end justify-between mb-8 px-6 lg:px-10 max-w-[1440px] mx-auto">
-              <div>
-                <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-2">Live Network Activity</h2>
-                <p className="text-slate-600">Real-time autonomous agent executions on Sui Testnet</p>
-              </div>
-              <span className="text-green-600 font-semibold flex items-center gap-2 text-sm bg-green-50 px-3 py-1 rounded-full">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                Network Synced
-              </span>
-            </div>
-
-            <div className="relative w-full overflow-hidden py-4">
-              {isAgentsLoading ? (
-                <div className="text-center py-10 text-[#005CBE] font-medium">Loading network agents...</div>
-              ) : allAgents.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">No agents found on Testnet. Start using the system!</div>
-              ) : (
-                <div className="animate-marquee hover:animation-paused flex gap-6 px-4">
-                  {allAgents.map((agent: any) => (
-                    <div key={agent.id} className="min-w-[320px] bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-col hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-[#EAF2FF] text-[#005CBE] flex items-center justify-center">
-                          <Bot className="w-5 h-5" />
-                        </div>
-                        <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${agent.status === 'Active' ? 'bg-green-50 text-green-700' : agent.status === 'Shutdown' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {agent.status}
-                        </span>
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-900 mb-1">{agent.name}</h3>
-                      <p className="text-xs text-slate-500 font-mono mb-4 bg-slate-50 p-2 rounded-lg truncate" title={agent.pubkey}>
-                        {agent.pubkey.substring(0, 16)}...
-                      </p>
-                      <div className="mt-auto">
-                        <div className="flex justify-between items-center text-xs mb-2">
-                          <span className="text-slate-400 font-semibold uppercase tracking-wider">Vault ID</span>
-                          <span className="font-mono text-slate-700 font-medium">{agent.policyId !== 'Pending' ? agent.policyId.substring(0, 8) + '...' : 'Pending'}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-400 font-semibold uppercase tracking-wider">Intent</span>
-                          <span className="text-slate-700 font-medium truncate max-w-[120px]" title={agent.prompt}>{agent.prompt || 'None'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {/* Duplicate for seamless marquee illusion if needed, though slideRight handles it */}
+          {/* Sponsors / Powered By Section */}
+          <section className="py-16 border-y border-white/40 bg-white/40 backdrop-blur-md mb-20">
+            <div className="max-w-[1440px] mx-auto px-6 lg:px-10">
+              <p className="text-center text-sm font-bold text-[#005CBE]/60 uppercase tracking-[0.2em] mb-10">Powered By & Built On</p>
+              <div className="flex flex-wrap justify-center items-center gap-16 md:gap-32">
+                
+                {/* Sui Logo */}
+                <div className="flex items-center gap-4 transition-all duration-500 cursor-pointer hover:scale-110">
+                  <img src="https://cryptologos.cc/logos/sui-sui-logo.svg" alt="Sui Blockchain" className="w-12 h-12" />
+                  <span className="text-4xl font-extrabold text-slate-800 tracking-tighter">Sui</span>
                 </div>
-              )}
+
+                {/* DeepBook Logo */}
+                <div className="flex items-center gap-4 transition-all duration-500 cursor-pointer hover:scale-110">
+                  <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/33391.png" alt="DeepBook V3" className="w-12 h-12 rounded-full shadow-sm" />
+                  <span className="text-4xl font-extrabold text-slate-800 tracking-tighter">DeepBook V3</span>
+                </div>
+
+              </div>
             </div>
           </section>
 
