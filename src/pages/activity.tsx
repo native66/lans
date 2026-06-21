@@ -55,42 +55,42 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">On-Chain Activity</h1>
-        <p className="text-foreground/60">Verifiable logs of all autonomous agent actions.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">On-Chain Activity</h1>
+        <p className="text-slate-500 font-medium mt-1">Verifiable logs of all autonomous agent actions.</p>
       </div>
 
-      <Card>
+      <Card className="bg-white/80 backdrop-blur-xl border-white/60 shadow-sm rounded-3xl overflow-hidden">
         <CardContent className="p-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-slate-100">
             {isLoading ? (
-               <div className="p-8 text-center text-foreground/50">Loading on-chain events...</div>
+               <div className="p-12 text-center text-slate-400 font-medium">Loading on-chain events...</div>
             ) : logs.length === 0 ? (
-               <div className="p-8 text-center text-foreground/50">No on-chain activity found. Create a policy and execute trades to see logs here.</div>
+               <div className="p-12 text-center text-slate-400 font-medium">No on-chain activity found. Create a policy and execute trades to see logs here.</div>
             ) : logs.map((log) => (
-              <div key={log.id} className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-card/50 transition-colors">
-                <div className="flex items-start gap-4">
-                  <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${log.status === 'success' ? 'bg-primary/10 text-primary' : 'bg-danger/10 text-danger'}`}>
-                    {log.status === 'success' ? <ShieldCheck className="w-4 h-4" /> : <History className="w-4 h-4" />}
+              <div key={log.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                <div className="flex items-start gap-5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${log.status === 'success' ? 'bg-[#EAF2FF] text-[#005CBE]' : 'bg-red-50 text-red-500'}`}>
+                    {log.status === 'success' ? <ShieldCheck className="w-6 h-6" /> : <History className="w-6 h-6" />}
                   </div>
                   <div>
-                    <h4 className="font-medium flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
                       {log.type}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase font-mono ${log.status === 'success' ? 'border-primary/20 text-primary bg-primary/10' : 'border-danger/20 text-danger bg-danger/10'}`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md uppercase font-bold tracking-wider ${log.status === 'success' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}>
                         {log.status}
                       </span>
                     </h4>
-                    <p className="text-sm text-foreground/60 mt-0.5">{log.agent}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs font-mono text-foreground/50">
-                      <span className="text-foreground">{log.details}</span>
+                    <p className="text-sm font-medium text-slate-500 mt-1">{log.agent}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs font-mono font-semibold text-slate-400 bg-slate-50 w-fit px-2 py-1 rounded-md">
+                      <span className="text-slate-600">{log.details}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-0 border-border pt-3 sm:pt-0 pl-12 sm:pl-0">
-                  <span className="text-xs text-foreground/50 shrink-0">{log.time}</span>
+                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 pl-17 sm:pl-0">
+                  <span className="text-xs font-semibold text-slate-400 bg-slate-50 px-2 py-1 rounded-md shrink-0">{log.time}</span>
                   {log.hash !== '-' && (
-                    <a href="#" className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 mt-1 font-mono">
-                      {log.hash} <ExternalLink className="w-3 h-3" />
+                    <a href="#" className="text-xs text-[#005CBE] hover:text-[#004e9f] flex items-center gap-1 mt-2 font-mono font-semibold bg-[#EAF2FF] px-2 py-1 rounded-md transition-colors">
+                      {log.hash.substring(0, 12)}... <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
                 </div>

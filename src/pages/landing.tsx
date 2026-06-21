@@ -120,7 +120,7 @@ export default function LandingPage() {
                 transition={{ delay: 0.1 }}
                 className="text-[4rem] md:text-[4.5rem] leading-[1.05] font-extrabold text-slate-900 tracking-tight mb-6"
               >
-                Your Smart <br />
+                <br />
                 <span className="text-[#005CBE]">LANS - Language agent Autonomous Native</span> <br />
                 on SUI.
               </motion.h1>
@@ -131,7 +131,9 @@ export default function LandingPage() {
                 transition={{ delay: 0.2 }}
                 className="text-lg md:text-xl text-slate-600 leading-relaxed max-w-xl mb-12"
               >
-                New to crypto? No problem. Just type what you want to do in plain English, and our AI will safely guide your journey on the lightning-fast Sui blockchain.
+                LANS is an advanced, non-custodial AI Intent Engine built exclusively for the Sui Hackathon. It bridges the gap between human language and on-chain execution — enabling anyone to trade on Sui DeepBook V3 simply by describing their intent in plain English.
+                <br />
+                No command lines. No complex UIs. No private key exposure. Just intent.
               </motion.p>
 
               <motion.div
