@@ -10,7 +10,7 @@
 
 ## 🌟 Overview
 
-**Sui Agent Wallet** is an advanced, non-custodial **AI Intent Engine** built exclusively for the Sui Hackathon. It translates natural language user intents into executable **Programmable Transaction Blocks (PTBs)**, enabling an autonomous AI Agent to execute complex trading strategies (Spot, Margin, Flash Loans) on **DeepBook V3**.
+**LANS** is an advanced, non-custodial **AI Intent Engine** built exclusively for the Sui Hackathon. It translates natural language user intents into executable **Programmable Transaction Blocks (PTBs)**, enabling an autonomous AI Agent to execute complex trading strategies (Spot, Margin, Flash Loans) on **DeepBook V3**.
 
 By pioneering the **"Direct Call Vault & Hot Potato"** Move pattern, we ensure 100% on-chain budget enforcement, protocol-scoped execution, and zero private key leakage.
 
