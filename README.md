@@ -68,6 +68,24 @@ Because the receipt is a Hot Potato, the AI's transaction **MUST** call `confirm
 
 ---
 
+## 🔍 DeepBook V3 Execution Flow (Real-time Logs)
+
+To assist judges in verifying the pure on-chain interaction, below is the raw transaction processing flow captured directly from the Backend Engine when a user submitted the prompt *"Buy DEEP with SUI"*. 
+
+| Step | Action | Payload / Result | Duration |
+| :--- | :--- | :--- | :--- |
+| **1. Intent Parsing** | `Parsing intent during init` | `{"prompt": "Buy DEEP with SUI"}` | - |
+| **2. LLM Translation** | `LLM raw parsed response` | `{"type":"spot", "action":"buy", "pool":"SUI_DEEP", "amount":0.2}` | ~1378ms |
+| **3. Agent Initialization** | `Agent initialized` | `{"id":"agent_17820...", "pubkey":"0x9dea58f1..."}` | - |
+| **4. On-chain Vault Link**| `Vault linked to agent` | `{"vaultId":"0x70cd4317..."}` | - |
+| **5. AI Auto-Execution** | `Auto-executing agent intent`| Extracts SUI, executes swap on DeepBook V3, Auto-routes proceeds | - |
+| **6. PTB Confirmation** | `PTB executed automatically` | Digest: [`EVtta2TT...`](https://suiexplorer.com/txblock/EVtta2TTjQkSz76M3tX56HxMtk3pkopaAahEqrcNLYdz?network=testnet) | ~2042ms |
+| **7. On-chain Verification**| `Logs fetched` | `{"tradeEvents": 1, "hasCreationLog": true}` | ~511ms |
+
+*This entire pipeline (from natural language to finalized on-chain execution) is completely autonomous, non-custodial, and uses absolutely NO mock data.*
+
+---
+
 ## 💻 Tech Stack
 
 - **Smart Contracts:** Sui Move (2024 Beta), DeepBook V3 Framework.

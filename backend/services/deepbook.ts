@@ -95,7 +95,6 @@ export class DeepBookService {
     // Note: Our Vaults are initialized with SUI (T = 0x2::sui::SUI)
     const [tradeCoin, tradeReceipt] = tx.moveCall({
       target: `${AGENT_POLICY_PACKAGE_ID}::policy::execute_trade`,
-      typeArguments: ['0x2::sui::SUI'],
       arguments: [
         tx.object(vaultId),
         tx.pure.u64(amountMist),
@@ -129,12 +128,8 @@ export class DeepBookService {
 
       returnedSui = baseProceeds; // Leftover SUI
 
-      // Send swapped assets to Vault Owner
-      tx.moveCall({
-        target: '0x2::transfer::public_transfer',
-        typeArguments: [poolInfo.quoteType],
-        arguments: [quoteProceeds, tx.pure.address(vaultOwner)]
-      });
+      // Send swapped assets to Vault Owner using native PTB command
+      tx.transferObjects([quoteProceeds], tx.pure.address(vaultOwner));
 
       // Destroy zero DEEP coin
       tx.moveCall({
@@ -158,12 +153,8 @@ export class DeepBookService {
 
       returnedSui = quoteProceeds; // Leftover SUI
 
-      // Send swapped assets to Vault Owner
-      tx.moveCall({
-        target: '0x2::transfer::public_transfer',
-        typeArguments: [poolInfo.baseType],
-        arguments: [baseProceeds, tx.pure.address(vaultOwner)]
-      });
+      // Send swapped assets to Vault Owner using native PTB command
+      tx.transferObjects([baseProceeds], tx.pure.address(vaultOwner));
 
       // Destroy zero DEEP coin
       tx.moveCall({
@@ -180,9 +171,12 @@ export class DeepBookService {
       arguments: [
         tx.object(vaultId),
         tradeReceipt,
-        returnedSui
+        returnedSui // Passed as reference internally by TS SDK
       ]
     });
+
+    // Step 4: Transfer the leftover SUI (returnedSui) back to the owner to prevent object leak!
+    tx.transferObjects([returnedSui], tx.pure.address(vaultOwner));
     
     return tx;
   }

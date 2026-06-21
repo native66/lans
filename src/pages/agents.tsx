@@ -45,6 +45,17 @@ export default function AgentsPage() {
     }
   });
 
+  // Fetch available DeepBook pools for prompt suggestions (real-time from Indexer)
+  const { data: poolsData } = useQuery({
+    queryKey: ["deepbook-pools"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/agents/pools");
+      return res.json();
+    },
+    staleTime: 60_000 // Cache for 1 minute
+  });
+  const availablePools: { poolName: string; base: string; quote: string }[] = poolsData?.pools || [];
+
   // Automatically scan on-chain when wallet connects
   useEffect(() => {
     if (account?.address) {
@@ -190,15 +201,19 @@ export default function AgentsPage() {
       }
 
       // Step 4: Confirm with Backend
-      await fetch("/api/v1/agents/confirm", {
+      const confirmRes = await fetch("/api/v1/agents/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: initData.id, policyId: realPolicyId })
       });
+      const confirmData = await confirmRes.json();
 
-      // Backend will automatically execute intent upon confirmation!
-
-      showToast('Agent Deployed & Secured On-chain! Vault Budget: ' + budgetSui + ' SUI. Digest: ' + digest);
+      // Check if execution failed
+      if (confirmData.executionError) {
+        showToast(`⚠️ Agent deployed but trade failed: ${confirmData.executionError}`);
+      } else {
+        showToast('Agent Deployed & Secured On-chain! Vault Budget: ' + budgetSui + ' SUI. Digest: ' + digest);
+      }
       setShowNewForm(false);
       setPrompt('');
       setBudgetSui('0.2');
@@ -500,10 +515,27 @@ export default function AgentsPage() {
               </label>
               <textarea
                 className="w-full p-4 rounded-xl border border-slate-200 bg-white min-h-[120px] resize-none focus:ring-2 focus:ring-[#005CBE]/50 outline-none text-slate-700 shadow-sm"
-                placeholder="E.g., Borrow 10k USDC via flash loan, buy SUI on Deepbook if price drops below 0.8, and return the loan immediately..."
+                placeholder="E.g., Buy DEEP with SUI, Swap SUI for DBUSDC, Buy WAL..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
               />
+              {availablePools.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Available Pools (Click to use):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availablePools.map((pool) => (
+                      <button
+                        key={pool.poolName}
+                        type="button"
+                        onClick={() => setPrompt(`Buy ${pool.base} with ${pool.quote}`)}
+                        className="text-xs px-3 py-1.5 rounded-full bg-[#EAF2FF] text-[#005CBE] hover:bg-blue-100 font-semibold transition-colors border border-blue-100"
+                      >
+                        {pool.base}/{pool.quote}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-slate-100">
@@ -532,7 +564,7 @@ export default function AgentsPage() {
 
           {agents.map((agent: any) => (
             <Card key={agent.id} className="relative overflow-hidden flex flex-col justify-between bg-white/80 backdrop-blur-xl border-white/60 shadow-sm rounded-3xl hover:shadow-md transition-shadow">
-              <div className={`absolute top-0 inset-x-0 h-1.5 ${agent.status === 'Active' ? 'bg-green-500' : 'bg-amber-400'}`} />
+              <div className={`absolute top-0 inset-x-0 h-1.5 ${agent.executionError ? 'bg-red-500' : agent.status === 'Active' ? 'bg-green-500' : 'bg-amber-400'}`} />
               <CardHeader className="pb-4 pt-6">
                 <div className="flex justify-between items-start">
                   <CardTitle className="flex items-center gap-2 text-xl font-bold text-slate-900">
@@ -557,24 +589,37 @@ export default function AgentsPage() {
                     <span className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Spent:</span>
                     <span className="font-bold text-slate-900">0 SUI</span>
                   </div>
+                  {agent.lastTxDigest && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Last Tx:</span>
+                      <a href={`https://suiexplorer.com/txblock/${agent.lastTxDigest}?network=testnet`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs font-bold text-[#005CBE] hover:underline bg-blue-50 px-2 py-1 rounded-md" title="View on Sui Explorer">
+                        {agent.lastTxDigest.substring(0, 10)}...
+                      </a>
+                    </div>
+                  )}
+                  {agent.executionError && (
+                    <div className="mt-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                      <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">⚠️ Execution Error</p>
+                      <p className="text-xs text-red-500 break-all">{agent.executionError}</p>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2 mt-6 pt-2">
                     <Button onClick={() => handleViewLogs(agent.id, agent.name)} className="flex-1 text-sm font-semibold bg-[#EAF2FF] text-[#005CBE] hover:bg-blue-100 rounded-xl h-10" size="sm">
                       <ScrollText className="w-4 h-4 mr-2" /> View Logs <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
-                    {agent.status !== 'Shutdown' ? (
-                      <Button
-                        onClick={() => handleRevokePolicy(agent.policyId)}
-                        variant="destructive"
-                        size="sm"
-                        className="px-4 flex-shrink-0 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border-none shadow-none font-semibold gap-2 h-10"
-                        title="Emergency Revoke & Recover Funds"
-                        disabled={agent.policyId === 'Pending'}
-                      >
-                        <XOctagon className="w-4 h-4" />
-                        Revoke
-                      </Button>
-                    ) : (
+                    <Button
+                      onClick={() => handleRevokePolicy(agent.policyId)}
+                      variant="destructive"
+                      size="sm"
+                      className="px-4 flex-shrink-0 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border-none shadow-none font-semibold gap-2 h-10"
+                      title="Emergency Revoke & Recover Funds"
+                      disabled={agent.policyId === 'Pending'}
+                    >
+                      <XOctagon className="w-4 h-4" />
+                      Revoke
+                    </Button>
+                    {agent.status === 'Shutdown' && (
                       <Button
                         onClick={() => setReactivatingAgentId(reactivatingAgentId === agent.id ? null : agent.id)}
                         className="bg-amber-100 text-amber-700 hover:bg-amber-200 shadow-none font-bold text-xs px-3 h-10 rounded-xl"

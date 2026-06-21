@@ -10,7 +10,7 @@ export const agentsRouter = Router();
 
 // In-memory DB for Hackathon. Stores agent keypairs securely in backend RAM.
 // In production, use encrypted PostgreSQL storage.
-const agentsDB: Record<string, { secretKey: string, pubkey: string, policyId?: string, name: string, prompt?: string, parsedIntent?: any }> = {};
+const agentsDB: Record<string, { secretKey: string, pubkey: string, policyId?: string, name: string, prompt?: string, parsedIntent?: any, lastTxDigest?: string, executionError?: string }> = {};
 
 const graphqlClient = new SuiGraphQLClient({
   url: process.env.VITE_SUI_GRAPHQL_URL || "https://sui-testnet.mystenlabs.com/graphql",
@@ -65,7 +65,9 @@ agentsRouter.get("/list", async (req, res) => {
           policyId: agent.policyId || "Pending",
           status: onChainStatus,
           prompt: agent.prompt,
-          parsedIntent: agent.parsedIntent
+          parsedIntent: agent.parsedIntent,
+          lastTxDigest: agent.lastTxDigest,
+          executionError: agent.executionError
         };
       })
     );
@@ -74,6 +76,28 @@ agentsRouter.get("/list", async (req, res) => {
   } catch (err) {
     logger.error("Failed to fetch agents list", { error: (err as Error).message });
     res.status(500).json({ error: "Failed to fetch agents" });
+  }
+});
+
+/**
+ * GET /api/v1/agents/pools
+ * Returns real-time available pools from the DeepBook V3 Testnet Indexer.
+ */
+agentsRouter.get("/pools", async (_req, res) => {
+  try {
+    const indexerRes = await fetch("https://deepbook-indexer.testnet.mystenlabs.com/get_pools");
+    if (!indexerRes.ok) throw new Error("Failed to fetch pools from DeepBook Indexer");
+    const pools = await indexerRes.json();
+    const formatted = (pools as any[]).map((p: any) => ({
+      poolName: p.pool_name,
+      base: p.base_asset_symbol,
+      quote: p.quote_asset_symbol,
+      poolId: p.pool_id
+    }));
+    res.json({ pools: formatted });
+  } catch (err) {
+    logger.error("Failed to fetch DeepBook pools", { error: (err as Error).message });
+    res.status(500).json({ error: "Failed to fetch pools" });
   }
 });
 
@@ -102,6 +126,16 @@ agentsRouter.post("/init", async (req, res) => {
           logger.warn("Intent validation failed: amount > budget", { intentAmount, userBudget });
           return res.status(400).json({ error: `Intent amount (${intentAmount}) exceeds vault budget (${userBudget}). Please reduce amount or increase budget.` });
         }
+      }
+    }
+
+    // Validate the pool exists on DeepBook BEFORE creating the agent (prevents wasted vault funds)
+    if (parsedIntent?.pool) {
+      try {
+        await deepBookService.resolvePoolId(parsedIntent.pool);
+      } catch (poolErr: any) {
+        logger.warn("Pool validation failed at init", { pool: parsedIntent.pool, error: poolErr.message });
+        return res.status(400).json({ error: `Pool "${parsedIntent.pool}" does not exist on DeepBook V3 Testnet. Available tokens: DEEP, SUI, DBUSDC, DBUSDT, WAL, DBTC. Please rephrase your intent.` });
       }
     }
 
@@ -154,16 +188,20 @@ agentsRouter.post("/confirm", async (req, res) => {
             signer: agentKeypair
          });
 
-         logger.info("PTB executed automatically upon confirmation", { agentId: id, digest: (execResult as any).digest });
+         agent.lastTxDigest = (execResult as any).digest;
+         agent.executionError = undefined;
+         logger.info("PTB executed automatically upon confirmation", { agentId: id, digest: agent.lastTxDigest });
        } catch(e) {
-         logger.error("Auto-execute PTB failed", { error: (e as Error).message });
+         const errMsg = (e as Error).message;
+         agent.executionError = errMsg;
+         logger.error("Auto-execute PTB failed", { error: errMsg });
        }
     }
 
     const secureResponse = { ...agent };
     delete (secureResponse as any).secretKey; // Ensure secret is never leaked
     
-    res.json({ status: "Linked successfully", agent: secureResponse });
+    res.json({ status: "Linked successfully", agent: secureResponse, executionError: agent.executionError });
   } catch (err) {
     logger.error("Failed to confirm agent", { error: (err as Error).message });
     res.status(500).json({ error: "Failed to confirm agent" });
