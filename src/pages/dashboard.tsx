@@ -21,21 +21,22 @@ export default function DashboardPage() {
   const account = useCurrentAccount();
 
 
-  // 1. Fetch Wallet Balance via GraphQL
+  // 1. Fetch Wallet Balance via RPC (More reliable than GraphQL for basic balances)
   const { data: balanceData } = useQuery({
     queryKey: ['balance', account?.address],
     queryFn: async () => {
-      const result = await graphqlClient.query({
-        query: `
-          query GetBalances($owner: SuiAddress!) {
-            address(address: $owner) {
-              balance(type: "0x2::sui::SUI") { totalBalance }
-            }
-          }
-        `,
-        variables: { owner: account!.address }
+      const res = await fetch('https://fullnode.testnet.sui.io:443', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'suix_getBalance',
+          params: [account!.address, '0x2::sui::SUI']
+        })
       });
-      return (result.data as any)?.address?.balance?.totalBalance || "0";
+      const data = await res.json();
+      return data?.result?.totalBalance || "0";
     },
     enabled: !!account,
   });

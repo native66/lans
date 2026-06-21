@@ -22,7 +22,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const AGENT_POLICY_PACKAGE_ID = (import.meta as any).env.VITE_AGENT_POLICY_PACKAGE_ID || "0xYOUR_PACKAGE_ID";
 
-  const { data: globalEvents, isLoading } = useQuery({
+  const { data: globalEvents, isLoading: isEventsLoading } = useQuery({
     queryKey: ['landing-global-events'],
     queryFn: async () => {
       const result = await graphqlClient.query({
@@ -45,6 +45,45 @@ export default function LandingPage() {
     refetchInterval: 10000,
   });
 
+  const { data: globalVaults, isLoading: isAgentsLoading } = useQuery({
+    queryKey: ['landing-global-vaults'],
+    queryFn: async () => {
+      const result = await graphqlClient.query({
+        query: `
+          query QueryVaults($type: String!) {
+            objects(first: 20, filter: { type: $type }) {
+              nodes {
+                address
+                asMoveObject {
+                  contents {
+                    json
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: { type: `${AGENT_POLICY_PACKAGE_ID}::policy::AgentVault` }
+      });
+      return (result.data as any)?.objects?.nodes || [];
+    },
+    enabled: AGENT_POLICY_PACKAGE_ID !== "0xYOUR_PACKAGE_ID",
+    refetchInterval: 10000,
+  });
+
+  const allAgents = globalVaults?.map((node: any, idx: number) => {
+    const fields = node.asMoveObject?.contents?.json;
+    const isShutdown = fields?.expiration_ms && Number(fields.expiration_ms) < Date.now();
+    
+    return {
+      id: "vault_" + idx,
+      name: "Autonomous Agent",
+      pubkey: fields?.agent_pubkey || "Unknown",
+      policyId: node.address,
+      status: isShutdown ? "Shutdown" : "Active",
+      prompt: "On-chain Vault"
+    };
+  }) || [];
   const recentTrades = globalEvents?.map((event: any, index: number) => {
     const parsed = event?.contents?.json;
     const amountSui = (Number(parsed?.amount_spent || 0) / 1e9).toFixed(2);
@@ -76,16 +115,9 @@ export default function LandingPage() {
       {/* Top Nav */}
       <header className="flex items-center justify-between px-6 lg:px-10 py-5 bg-white/95 border-b border-white/40 sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <span className="text-2xl font-bold text-[#005CBE] tracking-tight">LANS</span>
+          <img src="/logo.png" alt="LANS Logo" className="h-20 object-contain scale-110 origin-left" />
         </div>
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
-          <span className="text-[#005CBE] border-b-2 border-[#005CBE] pb-1 cursor-pointer">Overview</span>
-          <span className="hover:text-slate-900 cursor-pointer">Agents</span>
-          <span className="hover:text-slate-900 cursor-pointer">Policies</span>
-          <span className="hover:text-slate-900 cursor-pointer">Activity</span>
-          <span className="hover:text-slate-900 cursor-pointer">Passports</span>
-          <a href="https://deepbook.tech" target="_blank" rel="noopener noreferrer" className="hover:text-slate-900 cursor-pointer">DeepBook</a>
-        </nav>
+
         <div className="flex items-center gap-4">
           <button className="px-5 py-2 text-sm font-medium border border-slate-200 rounded-full hover:bg-slate-50 text-[#005CBE] transition-colors">
             Docs
@@ -122,42 +154,39 @@ export default function LandingPage() {
               >
                 <br />
                 <span className="text-[#005CBE]">LANS - Language agent Autonomous Native</span> <br />
-                on SUI.
+                <div className="flex flex-wrap items-center gap-6 mt-4">
+                  <span>on SUI.</span>
+                  
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="flex items-center gap-4 text-base font-sans font-normal tracking-normal"
+                  >
+                    <button
+                      onClick={() => navigate("/dashboard")}
+                      className="px-6 py-3 md:px-8 md:py-4 bg-[#005CBE] text-white rounded-full font-semibold hover:bg-[#004e9f] transition-all shadow-[0_4px_20px_rgba(0,92,190,0.3)] hover:scale-105"
+                    >
+                      Go to Dashboard
+                    </button>
+                    <button className="px-6 py-3 md:px-8 md:py-4 bg-white text-[#005CBE] border border-slate-200 rounded-full font-semibold hover:bg-slate-50 transition-all hover:scale-105 shadow-sm">
+                      Watch Tutorial
+                    </button>
+                  </motion.div>
+                </div>
               </motion.h1>
 
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="text-lg md:text-xl text-slate-600 leading-relaxed max-w-xl mb-12"
+                className="text-lg md:text-xl text-[#005CBE] font-medium leading-relaxed max-w-xl mb-12"
               >
                 LANS is an advanced, non-custodial AI Intent Engine built exclusively for the Sui Hackathon. It bridges the gap between human language and on-chain execution — enabling anyone to trade on Sui DeepBook V3 simply by describing their intent in plain English.
                 <br />
                 No command lines. No complex UIs. No private key exposure. Just intent.
               </motion.p>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="flex items-center gap-4"
-              >
-                {account ? (
-                  <button
-                    onClick={() => navigate("/dashboard")}
-                    className="px-8 py-4 bg-[#005CBE] text-white rounded-full font-semibold hover:bg-[#004e9f] transition-all shadow-[0_4px_20px_rgba(0,92,190,0.3)] hover:scale-105"
-                  >
-                    Go to Dashboard
-                  </button>
-                ) : (
-                  <div className="transform scale-125 origin-left">
-                    <ConnectButton />
-                  </div>
-                )}
-                <button className="px-8 py-4 bg-white text-[#005CBE] border border-slate-200 rounded-full font-semibold hover:bg-slate-50 transition-all hover:scale-105 shadow-sm">
-                  Watch Tutorial
-                </button>
-              </motion.div>
             </div>
 
             {/* 3D Floating Sui Drop Graphic */}
@@ -218,8 +247,8 @@ export default function LandingPage() {
           </section>
 
           {/* Live Network Activity Section */}
-          <section>
-            <div className="flex items-end justify-between mb-8">
+          <section className="overflow-hidden">
+            <div className="flex items-end justify-between mb-8 px-6 lg:px-10 max-w-[1440px] mx-auto">
               <div>
                 <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-2">Live Network Activity</h2>
                 <p className="text-slate-600">Real-time autonomous agent executions on Sui Testnet</p>
@@ -230,44 +259,42 @@ export default function LandingPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-              {isLoading ? (
-                <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-20 text-slate-400">Loading live network activity...</div>
-              ) : recentTrades.length === 0 ? (
-                <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-20 text-slate-400">No recent autonomous trades on Testnet. Start using the system!</div>
-              ) : recentTrades.map((trade) => (
-                <div key={trade.id} className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 flex flex-col hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="w-12 h-12 rounded-xl bg-[#EAF2FF] text-[#005CBE] flex items-center justify-center">
-                      <Activity className="w-6 h-6" />
+            <div className="relative w-full overflow-hidden py-4">
+              {isAgentsLoading ? (
+                <div className="text-center py-10 text-[#005CBE] font-medium">Loading network agents...</div>
+              ) : allAgents.length === 0 ? (
+                <div className="text-center py-10 text-slate-400">No agents found on Testnet. Start using the system!</div>
+              ) : (
+                <div className="animate-marquee hover:animation-paused flex gap-6 px-4">
+                  {allAgents.map((agent: any) => (
+                    <div key={agent.id} className="min-w-[320px] bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-col hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-[#EAF2FF] text-[#005CBE] flex items-center justify-center">
+                          <Bot className="w-5 h-5" />
+                        </div>
+                        <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${agent.status === 'Active' ? 'bg-green-50 text-green-700' : agent.status === 'Shutdown' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {agent.status}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900 mb-1">{agent.name}</h3>
+                      <p className="text-xs text-slate-500 font-mono mb-4 bg-slate-50 p-2 rounded-lg truncate" title={agent.pubkey}>
+                        {agent.pubkey.substring(0, 16)}...
+                      </p>
+                      <div className="mt-auto">
+                        <div className="flex justify-between items-center text-xs mb-2">
+                          <span className="text-slate-400 font-semibold uppercase tracking-wider">Vault ID</span>
+                          <span className="font-mono text-slate-700 font-medium">{agent.policyId !== 'Pending' ? agent.policyId.substring(0, 8) + '...' : 'Pending'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400 font-semibold uppercase tracking-wider">Intent</span>
+                          <span className="text-slate-700 font-medium truncate max-w-[120px]" title={agent.prompt}>{agent.prompt || 'None'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      Executed
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-3">On-chain Trade</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed min-h-[60px] mb-8">
-                    Agent <span className="font-mono text-[#005CBE] bg-blue-50 px-1 py-0.5 rounded">{trade.agent.substring(0, 8)}...</span> securely executed a trade on DeepBook V3.
-                  </p>
-                  <div className="mb-8">
-                    <div className="flex justify-between items-end mb-3">
-                      <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase w-1/2">Transaction<br />Volume</span>
-                      <span className="text-sm font-bold text-slate-900 text-right w-1/2">{trade.amount} SUI</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-[#005CBE] w-[100%] h-full rounded-full" />
-                    </div>
-                  </div>
-                  <div className="mt-auto flex items-center gap-3">
-                    <button className="flex-1 py-3 text-sm font-semibold text-[#005CBE] bg-[#EAF2FF] hover:bg-blue-100 rounded-xl transition-colors">
-                      View details
-                    </button>
-                  </div>
+                  ))}
+                  {/* Duplicate for seamless marquee illusion if needed, though slideRight handles it */}
                 </div>
-              ))}
-
+              )}
             </div>
           </section>
 
@@ -283,18 +310,18 @@ export default function LandingPage() {
                 <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Recent Activity</h2>
               </div>
 
-              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100">
-                <div className="relative border-l border-[#EAF2FF] ml-4 space-y-10 pb-8">
+              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 h-full">
+                <div className="relative border-l border-[#EAF2FF] ml-4 space-y-10">
 
                   {/* Event 1 */}
                   <div className="relative pl-8">
                     <div className="absolute -left-[9px] top-1 w-[18px] h-[18px] bg-white border-[3px] border-[#005CBE] text-[#005CBE] rounded-full flex items-center justify-center z-10" />
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-900">Saved money on fees</h4>
-                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">2m ago</span>
+                      <h4 className="font-bold text-slate-900">AI Intent Parsing</h4>
+                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">Just now</span>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed bg-slate-50/50 p-4 rounded-xl">
-                      Swapped 5,000 SUI for USDC seamlessly on DeepBook. Sui's low fees saved you $2 compared to other networks.
+                      LLM successfully processed "Buy Cetus with 5 SUI" into an executable JSON command, validating DeepBook pool IDs securely.
                     </p>
                   </div>
 
@@ -302,11 +329,11 @@ export default function LandingPage() {
                   <div className="relative pl-8">
                     <div className="absolute -left-[9px] top-1 w-[18px] h-[18px] bg-white border-[3px] border-[#005CBE] text-[#005CBE] rounded-full flex items-center justify-center z-10" />
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-900 pr-4">Daily Rewards Collected</h4>
-                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md shrink-0">45m ago</span>
+                      <h4 className="font-bold text-slate-900 pr-4">Zero-Trust Vault Deployment</h4>
+                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md shrink-0">1m ago</span>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed bg-slate-50/50 p-4 rounded-xl">
-                      Your Smart Saver bot collected 142.5 SUI in rewards and safely put them back to work.
+                      Deployed an AgentVault on Sui Testnet, locking in a 5 SUI budget with a strict policy expiration time.
                     </p>
                   </div>
 
@@ -314,20 +341,16 @@ export default function LandingPage() {
                   <div className="relative pl-8">
                     <div className="absolute -left-[9px] top-1 w-[18px] h-[18px] bg-white border-[3px] border-slate-200 text-slate-200 rounded-full flex items-center justify-center z-10" />
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-900 pr-4">Health Check: All Good!</h4>
-                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md shrink-0">2h ago</span>
+                      <h4 className="font-bold text-slate-900 pr-4">DeepBook PTB Execution</h4>
+                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md shrink-0">2m ago</span>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed bg-slate-50/50 p-4 rounded-xl">
-                      All your delightful assistants are running perfectly. Your funds are completely safe.
+                      Constructed and executed a Programmable Transaction Block (PTB) for native asset swapping on DeepBook V3.
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <button className="w-full py-3.5 border border-slate-200 hover:bg-slate-50 text-[#005CBE] font-semibold rounded-xl transition-colors">
-                    See All Activity
-                  </button>
-                </div>
+
               </div>
             </div>
 
@@ -340,7 +363,7 @@ export default function LandingPage() {
                 <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Your Safety Controls</h2>
               </div>
 
-              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 flex flex-col h-full">
+              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 h-full">
 
                 <div className="bg-[#F0F5FF] rounded-2xl p-6 flex items-center justify-between mb-8 border border-[#EAF2FF]">
                   <div>
@@ -354,7 +377,7 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="space-y-6 flex-1">
+                <div className="space-y-6">
 
                   {/* Item 1 */}
                   <div className="flex items-center justify-between">
@@ -363,8 +386,8 @@ export default function LandingPage() {
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M7 15h0M2 9.5h20" /></svg>
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 text-sm">Daily Spending Limit</h5>
-                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Agents can't spend more than $100 a day</p>
+                        <h5 className="font-bold text-slate-900 text-sm">Strict Budget Limits</h5>
+                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Agents can only spend the exact SUI amount locked in the Vault.</p>
                       </div>
                     </div>
                     {/* Toggle Component */}
@@ -380,8 +403,8 @@ export default function LandingPage() {
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" /></svg>
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 text-sm">Safe Apps Only</h5>
-                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Only interact with trusted Sui friends</p>
+                        <h5 className="font-bold text-slate-900 text-sm">Time-bound Policies</h5>
+                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Vaults automatically expire to prevent infinite fund access.</p>
                       </div>
                     </div>
                     {/* Toggle Component */}
@@ -397,8 +420,8 @@ export default function LandingPage() {
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 text-sm">Panic Button (Auto Stop)</h5>
-                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Pause everything if markets get crazy</p>
+                        <h5 className="font-bold text-slate-900 text-sm">Hot Potato Security</h5>
+                        <p className="text-xs text-slate-500 mt-0.5 max-w-[200px]">Agent must return exact requested assets or transaction reverts.</p>
                       </div>
                     </div>
                     {/* Toggle Component */}
@@ -409,12 +432,7 @@ export default function LandingPage() {
 
                 </div>
 
-                <div className="pt-8 mt-auto">
-                  <button className="w-full py-4 bg-[#0F172A] text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10">
-                    <Shield className="w-4 h-4" />
-                    Adjust My Safety Limits
-                  </button>
-                </div>
+
 
               </div>
             </div>

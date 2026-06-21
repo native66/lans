@@ -55,3 +55,16 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+@keyframes slideRight {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100vw); }
+}
+.animate-marquee {
+  display: flex;
+  white-space: nowrap;
+  animation: slideRight 20s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}

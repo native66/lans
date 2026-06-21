@@ -39,12 +39,9 @@ export function DashboardLayout() {
 
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50 bg-white/60 backdrop-blur-xl border-r border-white/40 flex-shrink-0 shadow-[4px_0_24px_rgba(0,92,190,0.05)]">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#005CBE] flex items-center justify-center shadow-md">
-            <span className="text-white font-bold tracking-tighter">L</span>
-          </div>
-          <span className="font-bold text-xl tracking-tight text-[#005CBE]">LANS</span>
-        </div>
+        <Link to="/" className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <img src="/logo.png" alt="LANS Logo" className="h-20 object-contain scale-110 origin-left" />
+        </Link>
         <nav className="flex-1 px-4 space-y-1 mt-6">
           {navigation.map((item) => {
             const isActive = location.pathname.startsWith(item.href);
@@ -90,12 +87,9 @@ export function DashboardLayout() {
         </header>
         
         <header className="md:hidden flex items-center justify-between px-6 py-4 border-b border-white/40 bg-white/60 backdrop-blur-md sticky top-0 z-40">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#005CBE] flex items-center justify-center shadow-md">
-              <span className="text-white font-bold text-xs tracking-tighter">L</span>
-            </div>
-            <span className="font-bold tracking-tight text-[#005CBE] text-xl">LANS</span>
-          </div>
+          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <img src="/logo.png" alt="LANS Logo" className="h-16 object-contain scale-110 origin-left" />
+          </Link>
           <div className="flex items-center gap-4">
             <ConnectButton />
             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white/80 rounded-lg text-[#005CBE]">
